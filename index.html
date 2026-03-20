@@ -69,6 +69,20 @@ input {
 </style>
 
 <script>
+const PASSWORD = "8024";
+
+if(sessionStorage.getItem("auth") !== "ok"){
+  let input = prompt("パスワードを入力");
+
+  if(input === PASSWORD){
+    sessionStorage.setItem("auth","ok");
+  } else {
+    alert("拒否");
+    document.body.innerHTML = "";
+    throw new Error("Unauthorized");
+  }
+}
+  
 const API = "https://script.google.com/macros/s/AKfycbx7aUPmZO-EzkkUl9aaD-J_vT6f7ydGNIFB_XLmn6-y-DUCzWW-DQyxdwR0vaIB4H_zEg/exec";
 
 let cart = [];
