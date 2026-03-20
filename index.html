@@ -26,264 +26,148 @@
 <input id="newStock" placeholder="在庫">
 <button onclick="addProduct()">追加</button>
 
-<!-- 管理者エリア -->
 <div id="adminArea" style="display:none;">
   <hr>
-  <h3>📊 売上（今日）</h3>
+  <h3>📊 売上</h3>
   <button onclick="getSales()">更新</button>
   <div id="sales"></div>
+
+  <hr>
+  <h3>🏆 店員ランキング</h3>
+  <button onclick="getRanking()">更新</button>
+  <div id="ranking"></div>
 </div>
 
 <button onclick="logout()">ログアウト</button>
 
-<style>
-body { font-size:18px; padding:10px; }
-
-.container {
-  display: flex;
-  flex-wrap: wrap;
-}
-
-.left, .right {
-  width: 50%;
-  padding: 10px;
-}
-
-.item {
-  border:1px solid #ccc;
-  padding:10px;
-  margin:5px;
-  cursor:pointer;
-}
-
-.low { color:red; font-weight:bold; }
-
-button {
-  padding:10px;
-  margin:5px;
-  font-size:16px;
-}
-
-input {
-  padding:10px;
-  margin:5px;
-  width:90%;
-}
-
-@media(max-width:768px){
-  .left, .right {
-    width: 100%;
-  }
-}
-</style>
-
 <script>
-// 🔐 ログイン設定
 const STAFF_PASS = "8065";
 const ADMIN_PASS = "0214";
 
 let role = sessionStorage.getItem("role");
 
 if(!role){
-  let input = prompt("パスワードを入力");
-
-  if(input === ADMIN_PASS){
-    role = "admin";
-  } else if(input === STAFF_PASS){
-    role = "staff";
-  } else {
-    alert("拒否");
-    document.body.innerHTML = "";
-    throw new Error("Unauthorized");
-  }
-
+  let input = prompt("パスワード");
+  if(input === ADMIN_PASS) role="admin";
+  else if(input === STAFF_PASS) role="staff";
+  else { alert("拒否"); document.body.innerHTML=""; throw "error"; }
   sessionStorage.setItem("role", role);
 }
 
-// API
-const API = "https://script.google.com/macros/s/AKfycbx7aUPmZO-EzkkUl9aaD-J_vT6f7ydGNIFB_XLmn6-y-DUCzWW-DQyxdwR0vaIB4H_zEg/exec";
+const API = "ここにGASのURL";
 
 let cart = [];
-let processing = false;
 
-// 初期化
-window.onload = () => {
+window.onload = ()=>{
   search();
-
-  if(role === "admin"){
-    document.getElementById("adminArea").style.display = "block";
+  if(role==="admin"){
+    document.getElementById("adminArea").style.display="block";
   }
 };
 
-// Enter検索
-document.getElementById("search")
-  .addEventListener("keypress", e => {
-    if(e.key === "Enter") search();
-});
-
-// 🔍 商品検索
 async function search(){
   const keyword = document.getElementById("search").value;
 
   const res = await fetch(API,{
     method:"POST",
-    body:JSON.stringify({ type:"search", keyword })
+    body:JSON.stringify({type:"search",keyword})
   });
 
   const data = await res.json();
 
-  let html = "";
-
+  let html="";
   data.forEach(p=>{
-    const stock = Number(p[3]);
-    const lowStock = stock <= 5 ? "low" : "";
-
-    if(stock <= 0){
-      html += `<div class="item low">${p[1]}（売切れ）</div>`;
-    } else {
-      html += `
-      <div class="item ${lowStock}" onclick="addCart('${p[0]}','${p[1]}',${p[2]})">
-        ${p[1]} - ${p[2]}円（在庫:${stock}）
-      </div>`;
-    }
+    html += `<div onclick="addCart('${p[0]}','${p[1]}',${p[2]})">
+      ${p[1]} - ${p[2]}円（在庫:${p[3]}）
+    </div>`;
   });
 
-  document.getElementById("list").innerHTML = html;
+  document.getElementById("list").innerHTML=html;
 }
 
-// 🛒 カート
 function addCart(id,name,price){
-  const found = cart.find(c => c.id === id);
-
-  if(found){
-    found.qty++;
-  } else {
-    cart.push({id,name,price:Number(price),qty:1});
-  }
-
+  const f = cart.find(c=>c.id===id);
+  if(f) f.qty++;
+  else cart.push({id,name,price:Number(price),qty:1});
   renderCart();
 }
 
 function renderCart(){
-  let html = "";
-  let total = 0;
+  let html="",total=0;
 
   cart.forEach((c,i)=>{
-    total += c.price * c.qty;
-
-    html += `
-    <div>
-      ${c.name} ×${c.qty}
-      <button onclick="inc(${i})">＋</button>
-      <button onclick="dec(${i})">－</button>
-      <button onclick="removeItem(${i})">削除</button>
-    </div>`;
+    total+=c.price*c.qty;
+    html+=`${c.name}×${c.qty}
+    <button onclick="inc(${i})">+</button>
+    <button onclick="dec(${i})">-</button><br>`;
   });
 
-  html += `<h3>合計：${total}円</h3>`;
-  document.getElementById("cart").innerHTML = html;
+  html+=`合計:${total}円`;
+  document.getElementById("cart").innerHTML=html;
 }
 
-function inc(i){ cart[i].qty++; renderCart(); }
-function dec(i){ cart[i].qty--; if(cart[i].qty<=0) cart.splice(i,1); renderCart(); }
-function removeItem(i){ cart.splice(i,1); renderCart(); }
+function inc(i){cart[i].qty++;renderCart();}
+function dec(i){cart[i].qty--;if(cart[i].qty<=0)cart.splice(i,1);renderCart();}
 
-// 🧾 会計
 async function checkout(){
-  if(processing) return;
-  processing = true;
-
-  const seller = document.getElementById("seller").value;
-
-  if(!seller){
-    alert("販売者名を入力してください");
-    processing = false;
-    return;
-  }
-
-  let receipt = "🧾 レシート\n";
-  let total = 0;
+  const seller=document.getElementById("seller").value;
 
   for(const item of cart){
-    const res = await fetch(API,{
+    await fetch(API,{
       method:"POST",
       body:JSON.stringify({
         type:"sell",
         id:item.id,
         qty:item.qty,
-        seller:seller
+        seller
       })
     });
-
-    const result = await res.json();
-
-    if(result.error){
-      alert("エラー：" + result.error);
-      processing = false;
-      return;
-    }
-
-    const subtotal = item.price * item.qty;
-    total += subtotal;
-
-    receipt += `${item.name} ×${item.qty} = ${subtotal}円\n`;
   }
 
-  receipt += `\n合計：${total}円\n担当：${seller}`;
-
-  alert(receipt);
-
-  cart = [];
+  alert("完了");
+  cart=[];
   renderCart();
   search();
-
-  processing = false;
 }
 
-// ➕ 商品追加
 async function addProduct(){
-  const name = document.getElementById("newName").value;
-  const price = document.getElementById("newPrice").value;
-  const stock = document.getElementById("newStock").value;
-
-  if(!name || !price || !stock){
-    alert("入力してください");
-    return;
-  }
+  const name=newName.value;
+  const price=newPrice.value;
+  const stock=newStock.value;
 
   await fetch(API,{
     method:"POST",
-    body:JSON.stringify({
-      type:"add",
-      name,
-      price,
-      stock
-    })
+    body:JSON.stringify({type:"add",name,price,stock})
   });
 
   alert("追加完了");
-
-  document.getElementById("newName").value = "";
-  document.getElementById("newPrice").value = "";
-  document.getElementById("newStock").value = "";
-
   search();
 }
 
-// 📊 売上取得（管理者）
 async function getSales(){
-  const res = await fetch(API,{
+  const res=await fetch(API,{
     method:"POST",
-    body:JSON.stringify({ type:"sales" })
+    body:JSON.stringify({type:"sales"})
   });
-
-  const data = await res.json();
-
-  document.getElementById("sales").innerHTML =
-    "今日の売上：" + data.total + "円";
+  const data=await res.json();
+  sales.innerHTML=`売上:${data.total}円（${data.count}件）`;
 }
 
-// 🔓 ログアウト
+async function getRanking(){
+  const res=await fetch(API,{
+    method:"POST",
+    body:JSON.stringify({type:"ranking"})
+  });
+  const data=await res.json();
+
+  let html="";
+  data.forEach((r,i)=>{
+    html+=`${i+1}位:${r.name} ${r.total}円<br>`;
+  });
+
+  ranking.innerHTML=html;
+}
+
 function logout(){
   sessionStorage.clear();
   location.reload();
