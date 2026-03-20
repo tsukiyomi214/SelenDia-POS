@@ -1,0 +1,250 @@
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<h2>POSレジ</h2>
+
+<input id="seller" placeholder="販売者名">
+<input id="search" placeholder="商品検索">
+
+<div class="container">
+  <div class="left">
+    <h3>商品一覧</h3>
+    <div id="list"></div>
+  </div>
+
+  <div class="right">
+    <h3>カート</h3>
+    <div id="cart"></div>
+    <button onclick="checkout()">🧾 会計</button>
+  </div>
+</div>
+
+<hr>
+
+<h3>商品追加</h3>
+<input id="newName" placeholder="商品名">
+<input id="newPrice" placeholder="価格">
+<input id="newStock" placeholder="在庫">
+<button onclick="addProduct()">追加</button>
+
+<style>
+body { font-size:18px; padding:10px; }
+
+.container {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.left, .right {
+  width: 50%;
+  padding: 10px;
+}
+
+.item {
+  border:1px solid #ccc;
+  padding:10px;
+  margin:5px;
+  cursor:pointer;
+}
+
+.low { color:red; font-weight:bold; }
+
+button {
+  padding:10px;
+  margin:5px;
+  font-size:16px;
+}
+
+input {
+  padding:10px;
+  margin:5px;
+  width:90%;
+}
+
+/* スマホ対応 */
+@media(max-width:768px){
+  .left, .right {
+    width: 100%;
+  }
+}
+</style>
+
+<script>
+const API = "https://script.google.com/macros/s/AKfycbx7aUPmZO-EzkkUl9aaD-J_vT6f7ydGNIFB_XLmn6-y-DUCzWW-DQyxdwR0vaIB4H_zEg/exec";
+
+let cart = [];
+let processing = false;
+
+// 初期表示
+window.onload = () => {
+  search();
+};
+
+// Enter検索
+document.getElementById("search")
+  .addEventListener("keypress", e => {
+    if(e.key === "Enter") search();
+});
+
+// 🔍 商品検索
+async function search(){
+  const keyword = document.getElementById("search").value;
+
+  const res = await fetch(API,{
+    method:"POST",
+    body:JSON.stringify({ type:"search", keyword })
+  });
+
+  const data = await res.json();
+
+  let html = "";
+
+  data.forEach(p=>{
+    const stock = Number(p[3]);
+    const lowStock = stock <= 5 ? "low" : "";
+
+    if(stock <= 0){
+      html += `<div class="item low">${p[1]}（売切れ）</div>`;
+    } else {
+      html += `
+      <div class="item ${lowStock}" onclick="addCart('${p[0]}','${p[1]}',${p[2]})">
+        ${p[1]} - ${p[2]}円（在庫:${stock}）
+      </div>`;
+    }
+  });
+
+  document.getElementById("list").innerHTML = html;
+}
+
+// 🛒 カート追加
+function addCart(id,name,price){
+  const found = cart.find(c => c.id === id);
+
+  if(found){
+    found.qty++;
+  } else {
+    cart.push({id,name,price:Number(price),qty:1});
+  }
+
+  renderCart();
+}
+
+// 🛒 カート表示
+function renderCart(){
+  let html = "";
+  let total = 0;
+
+  cart.forEach((c,i)=>{
+    total += c.price * c.qty;
+
+    html += `
+    <div>
+      ${c.name} ×${c.qty}
+      <button onclick="inc(${i})">＋</button>
+      <button onclick="dec(${i})">－</button>
+      <button onclick="removeItem(${i})">削除</button>
+    </div>`;
+  });
+
+  html += `<h3>合計：${total}円</h3>`;
+  document.getElementById("cart").innerHTML = html;
+}
+
+// 数量操作
+function inc(i){
+  cart[i].qty++;
+  renderCart();
+}
+
+function dec(i){
+  cart[i].qty--;
+  if(cart[i].qty <= 0) cart.splice(i,1);
+  renderCart();
+}
+
+function removeItem(i){
+  cart.splice(i,1);
+  renderCart();
+}
+
+// 🧾 会計
+async function checkout(){
+  if(processing) return;
+  processing = true;
+
+  const seller = document.getElementById("seller").value;
+
+  if(!seller){
+    alert("販売者名を入力してください");
+    processing = false;
+    return;
+  }
+
+  let receipt = "🧾 レシート\n";
+  let total = 0;
+
+  for(const item of cart){
+    const res = await fetch(API,{
+      method:"POST",
+      body:JSON.stringify({
+        type:"sell",
+        id:item.id,
+        qty:item.qty,
+        seller:seller
+      })
+    });
+
+    const result = await res.json();
+
+    if(result.error){
+      alert("エラー：" + result.error);
+      processing = false;
+      return;
+    }
+
+    const subtotal = item.price * item.qty;
+    total += subtotal;
+
+    receipt += `${item.name} ×${item.qty} = ${subtotal}円\n`;
+  }
+
+  receipt += `\n合計：${total}円\n担当：${seller}`;
+
+  alert(receipt);
+
+  cart = [];
+  renderCart();
+  search();
+
+  processing = false;
+}
+
+// ➕ 商品追加
+async function addProduct(){
+  const name = document.getElementById("newName").value;
+  const price = document.getElementById("newPrice").value;
+  const stock = document.getElementById("newStock").value;
+
+  if(!name || !price || !stock){
+    alert("入力してください");
+    return;
+  }
+
+  await fetch(API,{
+    method:"POST",
+    body:JSON.stringify({
+      type:"add",
+      name,
+      price,
+      stock
+    })
+  });
+
+  alert("追加完了");
+
+  document.getElementById("newName").value = "";
+  document.getElementById("newPrice").value = "";
+  document.getElementById("newStock").value = "";
+
+  search();
+}
+</script>
