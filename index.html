@@ -26,6 +26,16 @@
 <input id="newStock" placeholder="在庫">
 <button onclick="addProduct()">追加</button>
 
+<!-- 管理者エリア -->
+<div id="adminArea" style="display:none;">
+  <hr>
+  <h3>📊 売上（今日）</h3>
+  <button onclick="getSales()">更新</button>
+  <div id="sales"></div>
+</div>
+
+<button onclick="logout()">ログアウト</button>
+
 <style>
 body { font-size:18px; padding:10px; }
 
@@ -60,7 +70,6 @@ input {
   width:90%;
 }
 
-/* スマホ対応 */
 @media(max-width:768px){
   .left, .right {
     width: 100%;
@@ -69,29 +78,41 @@ input {
 </style>
 
 <script>
+// 🔐 ログイン設定
 const STAFF_PASS = "8065";
 const ADMIN_PASS = "0214";
 
-if(sessionStorage.getItem("auth") !== "ok"){
+let role = sessionStorage.getItem("role");
+
+if(!role){
   let input = prompt("パスワードを入力");
 
-  if(input === PASSWORD){
-    sessionStorage.setItem("auth","ok");
+  if(input === ADMIN_PASS){
+    role = "admin";
+  } else if(input === STAFF_PASS){
+    role = "staff";
   } else {
     alert("拒否");
     document.body.innerHTML = "";
     throw new Error("Unauthorized");
   }
+
+  sessionStorage.setItem("role", role);
 }
-  
+
+// API
 const API = "https://script.google.com/macros/s/AKfycbx7aUPmZO-EzkkUl9aaD-J_vT6f7ydGNIFB_XLmn6-y-DUCzWW-DQyxdwR0vaIB4H_zEg/exec";
 
 let cart = [];
 let processing = false;
 
-// 初期表示
+// 初期化
 window.onload = () => {
   search();
+
+  if(role === "admin"){
+    document.getElementById("adminArea").style.display = "block";
+  }
 };
 
 // Enter検索
@@ -130,7 +151,7 @@ async function search(){
   document.getElementById("list").innerHTML = html;
 }
 
-// 🛒 カート追加
+// 🛒 カート
 function addCart(id,name,price){
   const found = cart.find(c => c.id === id);
 
@@ -143,7 +164,6 @@ function addCart(id,name,price){
   renderCart();
 }
 
-// 🛒 カート表示
 function renderCart(){
   let html = "";
   let total = 0;
@@ -164,22 +184,9 @@ function renderCart(){
   document.getElementById("cart").innerHTML = html;
 }
 
-// 数量操作
-function inc(i){
-  cart[i].qty++;
-  renderCart();
-}
-
-function dec(i){
-  cart[i].qty--;
-  if(cart[i].qty <= 0) cart.splice(i,1);
-  renderCart();
-}
-
-function removeItem(i){
-  cart.splice(i,1);
-  renderCart();
-}
+function inc(i){ cart[i].qty++; renderCart(); }
+function dec(i){ cart[i].qty--; if(cart[i].qty<=0) cart.splice(i,1); renderCart(); }
+function removeItem(i){ cart.splice(i,1); renderCart(); }
 
 // 🧾 会計
 async function checkout(){
@@ -261,5 +268,24 @@ async function addProduct(){
   document.getElementById("newStock").value = "";
 
   search();
+}
+
+// 📊 売上取得（管理者）
+async function getSales(){
+  const res = await fetch(API,{
+    method:"POST",
+    body:JSON.stringify({ type:"sales" })
+  });
+
+  const data = await res.json();
+
+  document.getElementById("sales").innerHTML =
+    "今日の売上：" + data.total + "円";
+}
+
+// 🔓 ログアウト
+function logout(){
+  sessionStorage.clear();
+  location.reload();
 }
 </script>
